@@ -21,6 +21,10 @@ pub struct MipmapGeneratorSettings {
     pub minimum_mip_resolution: u32,
 }
 
+///Mipmaps will not be generated for materials found on entities that also have the `NoMipmapGeneration` component.
+#[derive(Component)]
+pub struct NoMipmapGeneration;
+
 impl Default for MipmapGeneratorSettings {
     fn default() -> Self {
         Self {
@@ -45,25 +49,29 @@ impl Plugin for MipmapGeneratorPlugin {
     }
 }
 
-pub fn generate_mipmaps<T: Material + GetImages>(
-    mut material_events: EventReader<AssetEvent<T>>,
-    mut materials: ResMut<Assets<T>>,
+pub fn generate_mipmaps<M: Material + GetImages>(
+    mut material_events: EventReader<AssetEvent<M>>,
+    mut materials: ResMut<Assets<M>>,
+    no_mipmap: Query<&Handle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
     default_sampler: Res<DefaultSampler>,
     settings: Res<MipmapGeneratorSettings>,
 ) {
-    for event in material_events.iter() {
+    'outer: for event in material_events.iter() {
         let handle = match event {
             AssetEvent::Created { handle } => handle,
             _ => continue,
         };
+        for m in no_mipmap.iter() {
+            if m == handle {
+                continue 'outer;
+            }
+        }
         if let Some(material) = materials.get_mut(handle) {
-            for image_h in material.get_images() {
-                if let Some(image_h) = image_h {
-                    if let Some(image) = images.get_mut(&image_h) {
-                        if image.texture_descriptor.mip_level_count == 1 {
-                            generate_mips(image, &settings, &default_sampler);
-                        }
+            for image_h in material.get_images().into_iter().flatten() {
+                if let Some(image) = images.get_mut(image_h) {
+                    if image.texture_descriptor.mip_level_count == 1 {
+                        generate_mips(image, &settings, &default_sampler);
                     }
                 }
             }
