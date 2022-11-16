@@ -1,0 +1,160 @@
+{
+    "asset": {
+        "generator": "Khronos glTF Blender I/O v3.3.32",
+        "version": "2.0"
+    },
+    "scene": 0,
+    "scenes": [
+        {
+            "name": "Scene",
+            "nodes": [
+                0
+            ]
+        }
+    ],
+    "nodes": [
+        {
+            "mesh": 0,
+            "name": "Plane"
+        }
+    ],
+    "materials": [
+        {
+            "doubleSided": true,
+            "name": "wood_cabinet_worn_long",
+            "normalTexture": {
+                "index": 0
+            },
+            "pbrMetallicRoughness": {
+                "baseColorTexture": {
+                    "index": 1
+                },
+                "metallicFactor": 0,
+                "metallicRoughnessTexture": {
+                    "index": 2
+                }
+            }
+        }
+    ],
+    "meshes": [
+        {
+            "name": "Plane.001",
+            "primitives": [
+                {
+                    "attributes": {
+                        "POSITION": 0,
+                        "NORMAL": 1,
+                        "TEXCOORD_0": 2
+                    },
+                    "indices": 3,
+                    "material": 0
+                }
+            ]
+        }
+    ],
+    "textures": [
+        {
+            "sampler": 0,
+            "source": 0
+        },
+        {
+            "sampler": 0,
+            "source": 1
+        },
+        {
+            "sampler": 0,
+            "source": 2
+        }
+    ],
+    "images": [
+        {
+            "mimeType": "image/jpeg",
+            "name": "wood_cabinet_worn_long_nor_gl",
+            "uri": "wood_cabinet_worn_long_nor_gl.jpg"
+        },
+        {
+            "mimeType": "image/jpeg",
+            "name": "wood_cabinet_worn_long_diff",
+            "uri": "wood_cabinet_worn_long_diff.jpg"
+        },
+        {
+            "mimeType": "image/jpeg",
+            "name": "wood_cabinet_worn_long_rough",
+            "uri": "wood_cabinet_worn_long_rough.jpg"
+        }
+    ],
+    "accessors": [
+        {
+            "bufferView": 0,
+            "componentType": 5126,
+            "count": 4,
+            "max": [
+                4.931852340698242,
+                0,
+                4.9318528175354
+            ],
+            "min": [
+                -4.931852340698242,
+                0,
+                -4.9318528175354
+            ],
+            "type": "VEC3"
+        },
+        {
+            "bufferView": 1,
+            "componentType": 5126,
+            "count": 4,
+            "type": "VEC3"
+        },
+        {
+            "bufferView": 2,
+            "componentType": 5126,
+            "count": 4,
+            "type": "VEC2"
+        },
+        {
+            "bufferView": 3,
+            "componentType": 5123,
+            "count": 6,
+            "type": "SCALAR"
+        }
+    ],
+    "bufferViews": [
+        {
+            "buffer": 0,
+            "byteLength": 48,
+            "byteOffset": 0,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteLength": 48,
+            "byteOffset": 48,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteLength": 32,
+            "byteOffset": 96,
+            "target": 34962
+        },
+        {
+            "buffer": 0,
+            "byteLength": 12,
+            "byteOffset": 128,
+            "target": 34963
+        }
+    ],
+    "samplers": [
+        {
+            "magFilter": 9729,
+            "minFilter": 9987
+        }
+    ],
+    "buffers": [
+        {
+            "byteLength": 140,
+            "uri": "wood.bin"
+        }
+    ]
+}
