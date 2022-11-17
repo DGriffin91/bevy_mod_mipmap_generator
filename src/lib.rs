@@ -71,7 +71,10 @@ pub fn generate_mipmaps<M: Material + GetImages>(
             for image_h in material.get_images().into_iter().flatten() {
                 if let Some(image) = images.get_mut(image_h) {
                     if image.texture_descriptor.mip_level_count == 1 {
-                        generate_mips_texture(image, &settings, &default_sampler);
+                        match generate_mips_texture(image, &settings, &default_sampler) {
+                            Ok(_) => (),
+                            Err(e) => warn!("{}", e),
+                        }
                     }
                 }
             }
@@ -83,7 +86,10 @@ pub fn generate_mips_texture(
     image: &mut Image,
     settings: &MipmapGeneratorSettings,
     default_sampler: &DefaultSampler,
-) {
+) -> anyhow::Result<()> {
+    if let Err(e) = check_image_compatible(image) {
+        return Err(e);
+    }
     match try_into_dynamic(image.clone()) {
         Ok(mut dyn_image) => {
             let (mip_level_count, image_data) = generate_mips(
@@ -100,8 +106,9 @@ pub fn generate_mips_texture(
             };
             descriptor.anisotropy_clamp = settings.anisotropic_filtering;
             image.sampler_descriptor = ImageSampler::Descriptor(descriptor);
+            Ok(())
         }
-        Err(e) => warn!("{}", e),
+        Err(e) => Err(e),
     }
 }
 
@@ -135,29 +142,16 @@ pub fn generate_mips(
 
 /// Extract a specific individual mip level as a new image.
 pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image> {
-    if image.is_compressed() {
-        return Err(anyhow!("Compressed images not supported"));
+    if let Err(e) = check_image_compatible(image) {
+        return Err(e);
     }
+
     let descriptor = &image.texture_descriptor;
 
     if descriptor.mip_level_count < mip_level {
         return Err(anyhow!(
             "Mip level {mip_level} requested, but only {} are avaliable.",
             descriptor.mip_level_count
-        ));
-    }
-
-    if descriptor.dimension != TextureDimension::D2 {
-        return Err(anyhow!(
-            "Image has dimension {:?} but only TextureDimension::D2 is supported.",
-            descriptor.dimension
-        ));
-    }
-
-    if descriptor.size.depth_or_array_layers != 1 {
-        return Err(anyhow!(
-            "Image contains {} layers only a single layer is supported.",
-            descriptor.size.depth_or_array_layers
         ));
     }
 
@@ -193,6 +187,29 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
         sampler_descriptor: image.sampler_descriptor.clone(),
         texture_view_descriptor: image.texture_view_descriptor.clone(),
     })
+}
+
+pub fn check_image_compatible(image: &Image) -> anyhow::Result<()> {
+    if image.is_compressed() {
+        return Err(anyhow!("Compressed images not supported"));
+    }
+    let descriptor = &image.texture_descriptor;
+
+    if descriptor.dimension != TextureDimension::D2 {
+        return Err(anyhow!(
+            "Image has dimension {:?} but only TextureDimension::D2 is supported.",
+            descriptor.dimension
+        ));
+    }
+
+    if descriptor.size.depth_or_array_layers != 1 {
+        return Err(anyhow!(
+            "Image contains {} layers only a single layer is supported.",
+            descriptor.size.depth_or_array_layers
+        ));
+    }
+
+    Ok(())
 }
 
 // Implement the GetImages trait for any materials that need conversion
