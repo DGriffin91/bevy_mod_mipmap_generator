@@ -4,7 +4,7 @@ use std::num::NonZeroU8;
 use bevy::{
     prelude::*,
     render::{
-        render_resource::{SamplerDescriptor, TextureFormat},
+        render_resource::{Extent3d, SamplerDescriptor, TextureDimension, TextureFormat},
         texture::ImageSampler,
     },
 };
@@ -79,7 +79,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
     }
 }
 
-fn generate_mips_texture(
+pub fn generate_mips_texture(
     image: &mut Image,
     settings: &MipmapGeneratorSettings,
     default_sampler: &DefaultSampler,
@@ -108,7 +108,7 @@ fn generate_mips_texture(
 /// Returns the number of mip levels, and a vec of bytes containing the image data.
 /// The `max_mip_count` includes the first input mip level. So setting this to 2 will
 /// result in a single additional mip level being generated, for a total of 2 levels.
-fn generate_mips(
+pub fn generate_mips(
     dyn_image: &mut DynamicImage,
     minimum_mip_resolution: u32,
     max_mip_count: u32,
@@ -131,6 +131,68 @@ fn generate_mips(
     }
 
     (mip_level_count, image_data)
+}
+
+/// Extract a specific individual mip level as a new image.
+pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image> {
+    if image.is_compressed() {
+        return Err(anyhow!("Compressed images not supported"));
+    }
+    let descriptor = &image.texture_descriptor;
+
+    if descriptor.mip_level_count < mip_level {
+        return Err(anyhow!(
+            "Mip level {mip_level} requested, but only {} are avaliable.",
+            descriptor.mip_level_count
+        ));
+    }
+
+    if descriptor.dimension != TextureDimension::D2 {
+        return Err(anyhow!(
+            "Image has dimension {:?} but only TextureDimension::D2 is supported.",
+            descriptor.dimension
+        ));
+    }
+
+    if descriptor.size.depth_or_array_layers != 1 {
+        return Err(anyhow!(
+            "Image contains {} layers only a single layer is supported.",
+            descriptor.size.depth_or_array_layers
+        ));
+    }
+
+    let block_size = descriptor.format.describe().block_size as usize;
+
+    //let mip_factor = 2u32.pow(mip_level - 1);
+    //let final_width = descriptor.size.width/mip_factor;
+    //let final_height = descriptor.size.height/mip_factor;
+
+    let mut width = descriptor.size.width as usize;
+    let mut height = descriptor.size.height as usize;
+
+    let mut byte_offset = 0usize;
+
+    for _ in 0..mip_level - 1 {
+        byte_offset += width * block_size * height;
+        width /= 2;
+        height /= 2;
+    }
+
+    let mut new_descriptor = descriptor.clone();
+
+    new_descriptor.mip_level_count = 1;
+    new_descriptor.size = Extent3d {
+        width: width as u32,
+        height: height as u32,
+        depth_or_array_layers: 1,
+    };
+
+    Ok(Image {
+        data: image.data[byte_offset..byte_offset + (width * block_size * height)].to_vec(),
+        texture_descriptor: new_descriptor,
+        sampler_descriptor: image.sampler_descriptor.clone(),
+        texture_view_descriptor: image.texture_view_descriptor.clone(),
+    })
 }
 
 // Implement the GetImages trait for any materials that need conversion
