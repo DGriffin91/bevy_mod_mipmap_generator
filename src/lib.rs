@@ -71,7 +71,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
             for image_h in material.get_images().into_iter().flatten() {
                 if let Some(image) = images.get_mut(image_h) {
                     if image.texture_descriptor.mip_level_count == 1 {
-                        generate_mips(image, &settings, &default_sampler);
+                        generate_mips_texture(image, &settings, &default_sampler);
                     }
                 }
             }
@@ -79,27 +79,19 @@ pub fn generate_mipmaps<M: Material + GetImages>(
     }
 }
 
-fn generate_mips(
+fn generate_mips_texture(
     image: &mut Image,
     settings: &MipmapGeneratorSettings,
     default_sampler: &DefaultSampler,
 ) {
     match try_into_dynamic(image.clone()) {
         Ok(mut dyn_image) => {
-            let mut image_data = dyn_image.as_bytes().to_vec();
-            let mut mip_level_count = 1;
-            let mut width = image.texture_descriptor.size.width;
-            let mut height = image.texture_descriptor.size.height;
-
-            while width / 2 >= settings.minimum_mip_resolution
-                && height / 2 >= settings.minimum_mip_resolution
-            {
-                mip_level_count += 1;
-                width /= 2;
-                height /= 2;
-                dyn_image = dyn_image.resize_exact(width, height, settings.filter_type);
-                image_data.append(&mut dyn_image.as_bytes().to_vec());
-            }
+            let (mip_level_count, image_data) = generate_mips(
+                &mut dyn_image,
+                settings.minimum_mip_resolution,
+                u32::MAX,
+                settings.filter_type,
+            );
             image.texture_descriptor.mip_level_count = mip_level_count;
             image.data = image_data;
             let mut descriptor = match image.sampler_descriptor.clone() {
@@ -111,6 +103,34 @@ fn generate_mips(
         }
         Err(e) => warn!("{}", e),
     }
+}
+
+/// Returns the number of mip levels, and a vec of bytes containing the image data.
+/// The `max_mip_count` includes the first input mip level. So setting this to 2 will
+/// result in a single additional mip level being generated, for a total of 2 levels.
+fn generate_mips(
+    dyn_image: &mut DynamicImage,
+    minimum_mip_resolution: u32,
+    max_mip_count: u32,
+    filter_type: FilterType,
+) -> (u32, Vec<u8>) {
+    let mut image_data = dyn_image.as_bytes().to_vec();
+    let mut mip_level_count = 1;
+    let mut width = dyn_image.width();
+    let mut height = dyn_image.height();
+
+    while width / 2 >= minimum_mip_resolution.max(1)
+        && height / 2 >= minimum_mip_resolution.max(1)
+        && mip_level_count < max_mip_count
+    {
+        width /= 2;
+        height /= 2;
+        *dyn_image = dyn_image.resize_exact(width, height, filter_type);
+        image_data.append(&mut dyn_image.as_bytes().to_vec());
+        mip_level_count += 1;
+    }
+
+    (mip_level_count, image_data)
 }
 
 // Implement the GetImages trait for any materials that need conversion
