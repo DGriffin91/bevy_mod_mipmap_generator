@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = "1.0"
 bevy = "0.9"
 image = "0.24"
+futures-lite = "1.12"
 
 # Enable optimization in debug mode
 [profile.dev]

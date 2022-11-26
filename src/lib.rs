@@ -7,13 +7,16 @@ use bevy::{
         render_resource::{Extent3d, SamplerDescriptor, TextureDimension, TextureFormat},
         texture::ImageSampler,
     },
+    tasks::{AsyncComputeTaskPool, Task},
+    utils::HashMap,
 };
+use futures_lite::future;
 use image::{imageops::FilterType, DynamicImage, ImageBuffer};
 
 #[derive(Resource, Deref)]
 pub struct DefaultSampler(SamplerDescriptor<'static>);
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct MipmapGeneratorSettings {
     /// Valid values: 1, 2, 4, 8, and 16.
     pub anisotropic_filtering: Option<NonZeroU8>,
@@ -49,42 +52,92 @@ impl Plugin for MipmapGeneratorPlugin {
     }
 }
 
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct MipmapTasks<M: Material + GetImages>(HashMap<Handle<Image>, (Task<Image>, Handle<M>)>);
+
+#[allow(clippy::too_many_arguments)]
 pub fn generate_mipmaps<M: Material + GetImages>(
+    mut commands: Commands,
     mut material_events: EventReader<AssetEvent<M>>,
     mut materials: ResMut<Assets<M>>,
     no_mipmap: Query<&Handle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
     default_sampler: Res<DefaultSampler>,
     settings: Res<MipmapGeneratorSettings>,
+    mut tasks_res: Option<ResMut<MipmapTasks<M>>>,
 ) {
+    let mut new_tasks = MipmapTasks(HashMap::new());
+
+    let tasks = if let Some(ref mut tasks) = tasks_res {
+        tasks
+    } else {
+        &mut new_tasks
+    };
+
+    let thread_pool = AsyncComputeTaskPool::get();
     'outer: for event in material_events.iter() {
-        let handle = match event {
+        let material_h = match event {
             AssetEvent::Created { handle } => handle,
             _ => continue,
         };
         for m in no_mipmap.iter() {
-            if m == handle {
+            if m == material_h {
                 continue 'outer;
             }
         }
-        if let Some(material) = materials.get_mut(handle) {
+        // get_mut(material_h) here so we see the filtering right away
+        // and even if mipmaps aren't made, we still get the filtering
+        if let Some(material) = materials.get_mut(material_h) {
             for image_h in material.get_images().into_iter().flatten() {
+                if tasks.contains_key(image_h) {
+                    continue; //There is already a task for this image
+                }
                 if let Some(image) = images.get_mut(image_h) {
-                    if image.texture_descriptor.mip_level_count == 1 {
-                        match generate_mips_texture(image, &settings) {
-                            Ok(_) => (),
-                            Err(e) => warn!("{}", e),
-                        }
-                    }
                     let mut descriptor = match image.sampler_descriptor.clone() {
                         ImageSampler::Default => (*default_sampler).clone(),
                         ImageSampler::Descriptor(descriptor) => descriptor,
                     };
                     descriptor.anisotropy_clamp = settings.anisotropic_filtering;
                     image.sampler_descriptor = ImageSampler::Descriptor(descriptor);
+                    if image.texture_descriptor.mip_level_count == 1
+                        && check_image_compatible(image).is_ok()
+                    {
+                        let mut image = image.clone();
+                        let settings = settings.clone();
+                        let task = thread_pool.spawn(async move {
+                            match generate_mips_texture(&mut image, &settings.clone()) {
+                                Ok(_) => (),
+                                Err(e) => warn!("{}", e),
+                            }
+                            image
+                        });
+                        tasks.insert(image_h.clone(), (task, material_h.clone()));
+                    }
                 }
             }
         }
+    }
+
+    let mut completed = Vec::new();
+
+    for (image_h, inner) in tasks.iter_mut() {
+        // TODO couldn't get &mut in destructure to work correctly for (task, material_h)
+        if let Some(new_image) = future::block_on(future::poll_once(&mut inner.0)) {
+            if let Some(image) = images.get_mut(image_h) {
+                *image = new_image;
+            }
+            // Touch material to trigger change detection
+            let _ = materials.get_mut(&inner.1);
+            completed.push(image_h.clone());
+        }
+    }
+
+    for image_h in completed {
+        tasks.remove(&image_h);
+    }
+
+    if tasks_res.is_none() {
+        commands.insert_resource(new_tasks);
     }
 }
 
