@@ -58,5 +58,4 @@ impl GetImages for StandardMaterial {
 
 ## TODO
 - Support more texture formats.
-- Compute mipmaps async in a separate thread.
 - Support re-running if images are updated.
