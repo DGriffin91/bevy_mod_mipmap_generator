@@ -28,7 +28,10 @@ fn setup(
 
     // plane
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Plane { size: 20.0 })),
+        mesh: meshes.add(Mesh::from(shape::Plane {
+            size: 20.0,
+            ..default()
+        })),
         material: materials.add(StandardMaterial::from(images.add(image))),
         ..default()
     });
@@ -86,6 +89,7 @@ fn create_test_image(size: u32, cx: f32, cy: f32) -> Image {
             usage: TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_DST
                 | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[TextureFormat::Rgba8UnormSrgb],
         },
         data,
         ..Default::default()
