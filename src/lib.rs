@@ -88,7 +88,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
         // get_mut(material_h) here so we see the filtering right away
         // and even if mipmaps aren't made, we still get the filtering
         if let Some(material) = materials.get_mut(material_h) {
-            for image_h in material.get_images().into_iter().flatten() {
+            for image_h in material.get_images().into_iter() {
                 if tasks.contains_key(image_h) {
                     continue; //There is already a task for this image
                 }
@@ -262,11 +262,11 @@ pub fn check_image_compatible(image: &Image) -> anyhow::Result<()> {
 
 // Implement the GetImages trait for any materials that need conversion
 pub trait GetImages {
-    fn get_images(&self) -> Vec<&Option<Handle<Image>>>;
+    fn get_images(&self) -> Vec<&Handle<Image>>;
 }
 
 impl GetImages for StandardMaterial {
-    fn get_images(&self) -> Vec<&Option<Handle<Image>>> {
+    fn get_images(&self) -> Vec<&Handle<Image>> {
         vec![
             &self.base_color_texture,
             &self.emissive_texture,
@@ -274,6 +274,9 @@ impl GetImages for StandardMaterial {
             &self.normal_map_texture,
             &self.occlusion_texture,
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 
