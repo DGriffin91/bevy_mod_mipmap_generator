@@ -28,7 +28,7 @@ In my experience, many of these compressed formats can be used with bevy in `glt
     // Add MipmapGeneratorPlugin after default plugins
     .add_plugin(MipmapGeneratorPlugin)
     // Add material types to be converted
-    .add_system(generate_mipmaps::<StandardMaterial>
+    .add_system(generate_mipmaps::<StandardMaterial>)
 ```
 
 When materials are created, mipmaps will be created for the images used in the material.
