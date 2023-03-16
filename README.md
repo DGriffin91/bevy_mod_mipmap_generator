@@ -40,11 +40,11 @@ For use with custom materials, just implement the GetImages trait for the custom
 
 ```rust
 pub trait GetImages {
-    fn get_images(&self) -> Vec<&Option<Handle<Image>>>;
+    fn get_images(&self) -> Vec<&Handle<Image>>;
 }
 
 impl GetImages for StandardMaterial {
-    fn get_images(&self) -> Vec<&Option<Handle<Image>>> {
+    fn get_images(&self) -> Vec<&Handle<Image>> {
         vec![
             &self.base_color_texture,
             &self.emissive_texture,
@@ -52,6 +52,9 @@ impl GetImages for StandardMaterial {
             &self.normal_map_texture,
             &self.occlusion_texture,
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 ```
