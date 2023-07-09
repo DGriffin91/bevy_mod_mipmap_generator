@@ -9,11 +9,11 @@ use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin};
 fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
+        .add_systems(Startup, setup)
         // Add MipmapGeneratorPlugin after default plugins
-        .add_plugin(MipmapGeneratorPlugin)
+        .add_plugins(MipmapGeneratorPlugin)
         // Add material types to be converted
-        .add_system(generate_mipmaps::<StandardMaterial>)
-        .add_startup_system(setup);
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>);
 
     app.run();
 }

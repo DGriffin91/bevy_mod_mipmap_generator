@@ -1,7 +1,5 @@
 //! Loads and renders a glTF file as a scene.
 
-use std::num::NonZeroU8;
-
 use bevy::prelude::*;
 use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 
@@ -11,14 +9,14 @@ fn main() {
         .add_plugins(DefaultPlugins)
         // Manually setting anisotropic filtering to 16x
         .insert_resource(MipmapGeneratorSettings {
-            anisotropic_filtering: NonZeroU8::new(16),
+            anisotropic_filtering: 16,
             ..default()
         })
+        .add_systems(Startup, setup)
         // Add MipmapGeneratorPlugin after default plugins
-        .add_plugin(MipmapGeneratorPlugin)
+        .add_plugins(MipmapGeneratorPlugin)
         // Add material types to be converted
-        .add_system(generate_mipmaps::<StandardMaterial>)
-        .add_startup_system(setup)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         //.add_system(animate_light_direction)
         .run();
 }

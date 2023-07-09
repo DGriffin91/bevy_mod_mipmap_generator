@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use std::num::NonZeroU8;
 
 use bevy::{
     prelude::*,
@@ -19,7 +18,7 @@ pub struct DefaultSampler(SamplerDescriptor<'static>);
 #[derive(Resource, Clone)]
 pub struct MipmapGeneratorSettings {
     /// Valid values: 1, 2, 4, 8, and 16.
-    pub anisotropic_filtering: Option<NonZeroU8>,
+    pub anisotropic_filtering: u16,
     pub filter_type: FilterType,
     pub minimum_mip_resolution: u32,
 }
@@ -32,9 +31,9 @@ impl Default for MipmapGeneratorSettings {
     fn default() -> Self {
         Self {
             // Default to 8x anisotropic filtering
-            anisotropic_filtering: NonZeroU8::new(8),
+            anisotropic_filtering: 8,
             filter_type: FilterType::Triangle,
-            minimum_mip_resolution: 2,
+            minimum_mip_resolution: 1,
         }
     }
 }
@@ -203,7 +202,7 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
         ));
     }
 
-    let block_size = descriptor.format.describe().block_size as usize;
+    let block_size = descriptor.format.block_size(None).unwrap() as usize;
 
     //let mip_factor = 2u32.pow(mip_level - 1);
     //let final_width = descriptor.size.width/mip_factor;
