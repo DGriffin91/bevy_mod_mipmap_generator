@@ -1,6 +1,6 @@
 # bevy_mod_mipmap_generator
 
-## A basic mipmap generator for bevy 0.11.
+## A basic mipmap generator for bevy 0.12.
 
 ![example_without](example_without.jpg)
 *without mipmaps*
@@ -12,7 +12,9 @@
 
 Bevy supports a [variety of compressed image formats](https://docs.rs/bevy/latest/bevy/render/texture/enum.ImageFormat.html) that can also contain mipmaps. This plugin is intended for situations where the use of those formats is impractical (mostly prototyping/testing). With this plugin, mipmap generation happens slowly on the cpu.
 
-For generating compressed textures ahead of time check out:
+Instead of using this plugin, consider using the new [CompressedImageSaver](https://bevyengine.org/news/bevy-0-12/#compressedimagesaver).
+
+For generating compressed textures ahead of time also check out:
 - [klafsa](https://github.com/superdump/klafsa)
 - [kram](https://github.com/alecazam/kram)
 - [toktx](https://github.khronos.org/KTX-Software/ktxtools/toktx.html)
