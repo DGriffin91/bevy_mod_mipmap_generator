@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use bevy::{
     prelude::*,
     render::{
+        render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
         texture::{ImageSampler, ImageSamplerDescriptor},
     },
@@ -203,7 +204,7 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
         ));
     }
 
-    let block_size = descriptor.format.block_size(None).unwrap() as usize;
+    let block_size = descriptor.format.block_copy_size(None).unwrap() as usize;
 
     //let mip_factor = 2u32.pow(mip_level - 1);
     //let final_width = descriptor.size.width/mip_factor;
@@ -234,6 +235,7 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
         texture_descriptor: new_descriptor,
         sampler: image.sampler.clone(),
         texture_view_descriptor: image.texture_view_descriptor.clone(),
+        asset_usage: RenderAssetUsages::default(),
     })
 }
 

@@ -30,7 +30,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 2000.0,
+            intensity: 2000.0 * 1000.0,
             shadows_enabled: true,
             range: 10.0,
             ..default()

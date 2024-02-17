@@ -1,6 +1,6 @@
 # bevy_mod_mipmap_generator
 
-## A basic mipmap generator for bevy 0.12.
+## A basic mipmap generator for bevy 0.13.
 
 ![example_without](example_without.jpg)
 *without mipmaps*

@@ -28,17 +28,14 @@ fn setup(
 
     // plane
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Plane {
-            size: 20.0,
-            ..default()
-        })),
+        mesh: meshes.add(Plane3d::default().mesh().size(20.0, 20.0)),
         material: materials.add(StandardMaterial::from(images.add(image))),
         ..default()
     });
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 1500.0,
+            intensity: 1500.0 * 1000.0,
             shadows_enabled: true,
             ..default()
         },
