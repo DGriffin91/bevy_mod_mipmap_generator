@@ -119,23 +119,19 @@ pub fn generate_mipmaps<M: Material + GetImages>(
         }
     }
 
-    let mut completed = Vec::new();
-
-    for (image_h, inner) in tasks.iter_mut() {
-        // TODO couldn't get &mut in destructure to work correctly for (task, material_h)
-        if let Some(new_image) = future::block_on(future::poll_once(&mut inner.0)) {
-            if let Some(image) = images.get_mut(image_h) {
-                *image = new_image;
+    tasks.retain(
+        |image_h, (task, material_h)| match future::block_on(future::poll_once(task)) {
+            Some(new_image) => {
+                if let Some(image) = images.get_mut(image_h) {
+                    *image = new_image;
+                    // Touch material to trigger change detection
+                    let _ = materials.get_mut(&*material_h);
+                }
+                false
             }
-            // Touch material to trigger change detection
-            let _ = materials.get_mut(&inner.1);
-            completed.push(image_h.clone());
-        }
-    }
-
-    for image_h in completed {
-        tasks.remove(&image_h);
-    }
+            None => true,
+        },
+    );
 
     if tasks_res.is_none() {
         commands.insert_resource(new_tasks);
