@@ -18,6 +18,7 @@ bevy = { version = "0.13", default-features = false, features = [
     "ktx2",
     "zstd",
     "jpeg",
+    "multi-threaded",
 ] }
 image = "0.24"
 futures-lite = "1.12"
