@@ -53,7 +53,10 @@ impl Plugin for MipmapGeneratorPlugin {
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
-pub struct MipmapTasks<M: Material + GetImages>(HashMap<Handle<Image>, (Task<Image>, Handle<M>)>);
+#[allow(clippy::type_complexity)]
+pub struct MipmapTasks<M: Material + GetImages>(
+    HashMap<Handle<Image>, (Task<Image>, Vec<Handle<M>>)>,
+);
 
 #[allow(clippy::too_many_arguments)]
 pub fn generate_mipmaps<M: Material + GetImages>(
@@ -90,7 +93,8 @@ pub fn generate_mipmaps<M: Material + GetImages>(
         // and even if mipmaps aren't made, we still get the filtering
         if let Some(material) = materials.get_mut(*material_h) {
             for image_h in material.get_images().into_iter() {
-                if tasks.contains_key(image_h) {
+                if let Some((_, material_handles)) = tasks.get_mut(image_h) {
+                    material_handles.push(Handle::Weak(*material_h));
                     continue; //There is already a task for this image
                 }
                 if let Some(image) = images.get_mut(image_h) {
@@ -112,26 +116,28 @@ pub fn generate_mipmaps<M: Material + GetImages>(
                             }
                             image
                         });
-                        tasks.insert(image_h.clone(), (task, Handle::Weak(material_h.clone())));
+                        tasks.insert(image_h.clone(), (task, vec![Handle::Weak(*material_h)]));
                     }
                 }
             }
         }
     }
 
-    tasks.retain(
-        |image_h, (task, material_h)| match future::block_on(future::poll_once(task)) {
+    tasks.retain(|image_h, (task, material_handles)| {
+        match future::block_on(future::poll_once(task)) {
             Some(new_image) => {
                 if let Some(image) = images.get_mut(image_h) {
                     *image = new_image;
                     // Touch material to trigger change detection
-                    let _ = materials.get_mut(&*material_h);
+                    for material_h in material_handles.iter() {
+                        let _ = materials.get_mut(material_h);
+                    }
                 }
                 false
             }
             None => true,
-        },
-    );
+        }
+    });
 
     if tasks_res.is_none() {
         commands.insert_resource(new_tasks);
