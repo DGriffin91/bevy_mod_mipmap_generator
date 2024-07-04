@@ -5,7 +5,7 @@ use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapG
 
 fn main() {
     App::new()
-        .insert_resource(ClearColor(Color::rgb(0.1, 0.1, 0.1)))
+        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         .add_plugins(DefaultPlugins)
         // Manually setting anisotropic filtering to 16x
         .insert_resource(MipmapGeneratorSettings {

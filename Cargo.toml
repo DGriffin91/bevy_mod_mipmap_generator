@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-bevy = { version = "0.13", default-features = false, features = [
+bevy = { version = "0.14", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_pbr",
@@ -18,13 +18,13 @@ bevy = { version = "0.13", default-features = false, features = [
     "ktx2",
     "zstd",
     "jpeg",
-    "multi-threaded",
+    "multi_threaded",
 ] }
 image = "0.24"
 futures-lite = "1.12"
 
 [dev-dependencies]
-bevy = { version = "0.13" }
+bevy = { version = "0.14" }
 
 # Enable optimization in debug mode
 [profile.dev]
