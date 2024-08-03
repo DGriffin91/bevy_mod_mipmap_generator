@@ -310,6 +310,7 @@ pub fn generate_mips_texture(
 }
 
 /// Returns a vec of bytes containing the image data for all generated mips.
+/// Use `calculate_mip_count()` to find the value for `mip_count`.
 pub fn generate_mips(
     dyn_image: &mut DynamicImage,
     mip_count: u32,
@@ -333,6 +334,11 @@ pub fn generate_mips(
 
     let mut image_data = compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec());
 
+    #[cfg(feature = "compress")]
+    let min = if compression.is_some() { 4 } else { 1 };
+    #[cfg(not(feature = "compress"))]
+    let min = 1;
+
     for _ in 0..mip_count {
         width /= 2;
         height /= 2;
@@ -345,6 +351,9 @@ pub fn generate_mips(
             compressed_image_data = bcn_compress_dyn_image(compression_settings, dyn_image).ok();
         }
         image_data.append(&mut compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec()));
+        if width <= min || height <= min {
+            break;
+        }
     }
 
     image_data
@@ -364,7 +373,6 @@ pub fn calculate_mip_count(
 
     #[cfg(feature = "compress")]
     let min = if compression.is_some() { 4 } else { 1 };
-
     #[cfg(not(feature = "compress"))]
     let min = 1;
 
