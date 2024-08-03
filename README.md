@@ -2,6 +2,14 @@
 
 ## A basic mipmap generator for bevy 0.14.
 
+Optionally use the `compress` feature and corresponding setting in `MipmapGeneratorSettings` to enable BCn compression. Note: Compression can take a long time depending on the quantity and resolution of the images.
+
+Currently supported conversions:
+- R8Unorm -> Bc4RUnorm
+- Rg8Unorm -> Bc5RgUnorm
+- Rgba8Unorm -> Bc7RgbaUnorm
+- Rgba8UnormSrgb -> Bc7RgbaUnormSrgb
+
 ![example_without](example_without.jpg)
 *without mipmaps*
 

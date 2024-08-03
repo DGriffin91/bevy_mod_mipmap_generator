@@ -22,6 +22,7 @@ bevy = { version = "0.14", default-features = false, features = [
 ] }
 image = "0.24"
 futures-lite = "1.12"
+intel_tex_2 = { version = "0.4.0", optional = true }
 
 [dev-dependencies]
 bevy = { version = "0.14" }
@@ -33,3 +34,7 @@ opt-level = 1
 # Enable high optimizations for dependencies (incl. Bevy), but not for our code:
 [profile.dev.package."*"]
 opt-level = 3
+
+[features]
+#default = ["compress"]
+compress = ["dep:intel_tex_2"]

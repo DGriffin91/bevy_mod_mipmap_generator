@@ -36,7 +36,7 @@ fn setup(
     commands.spawn(PointLightBundle {
         point_light: PointLight {
             intensity: 1500.0 * 1000.0,
-            shadows_enabled: true,
+            shadows_enabled: false,
             ..default()
         },
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
@@ -83,10 +83,8 @@ fn create_test_image(size: u32, cx: f32, cy: f32) -> Image {
             format: TextureFormat::Rgba8UnormSrgb,
             mip_level_count: 1,
             sample_count: 1,
-            usage: TextureUsages::TEXTURE_BINDING
-                | TextureUsages::COPY_DST
-                | TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[TextureFormat::Rgba8UnormSrgb],
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            view_formats: &[],
         },
         data,
         ..Default::default()

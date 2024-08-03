@@ -4,12 +4,16 @@ use bevy::prelude::*;
 use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let use_compression = args.contains(&"--compress".to_string());
+
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         .add_plugins(DefaultPlugins)
         // Manually setting anisotropic filtering to 16x
         .insert_resource(MipmapGeneratorSettings {
             anisotropic_filtering: 16,
+            compression: Option::from(use_compression.then(Default::default)),
             ..default()
         })
         .add_systems(Startup, setup)
