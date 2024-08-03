@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, path::PathBuf};
 
 use bevy::{
     prelude::*,
@@ -9,10 +9,18 @@ use bevy::{
 use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let use_cache = args.contains(&"--cache".to_string());
+
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .insert_resource(MipmapGeneratorSettings {
             compression: Some(Default::default()),
+            compressed_image_data_cache_path: if use_cache {
+                Some(PathBuf::from("compressed_texture_cache"))
+            } else {
+                None
+            },
             ..default()
         })
         .add_systems(Startup, setup)

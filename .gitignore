@@ -1,2 +1,3 @@
 /target
 Cargo.lock
+compressed_texture_cache

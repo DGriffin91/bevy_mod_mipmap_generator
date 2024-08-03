@@ -1,3 +1,11 @@
+#[cfg(feature = "compress")]
+use std::{
+    fs::{self, File},
+    hash::{DefaultHasher, Hash, Hasher},
+    io::{Read, Write},
+    path::Path,
+};
+
 use anyhow::anyhow;
 
 use bevy::{
@@ -31,6 +39,22 @@ pub struct MipmapGeneratorSettings {
     ///- Rgba8Unorm -> Bc7RgbaUnorm
     ///- Rgba8UnormSrgb -> Bc7RgbaUnormSrgb
     pub compression: Option<CompressionSpeed>,
+    /// If set, raw compressed image data will be cached in this directory.
+    /// Images that are not BCn compressed are not cached.
+    pub compressed_image_data_cache_path: Option<std::path::PathBuf>,
+}
+
+impl Default for MipmapGeneratorSettings {
+    fn default() -> Self {
+        Self {
+            // Default to 8x anisotropic filtering
+            anisotropic_filtering: 8,
+            filter_type: FilterType::Triangle,
+            minimum_mip_resolution: 1,
+            compression: None,
+            compressed_image_data_cache_path: None,
+        }
+    }
 }
 
 #[derive(Default, Clone, Copy)]
@@ -61,22 +85,19 @@ impl CompressionSpeed {
 #[derive(Component)]
 pub struct NoMipmapGeneration;
 
-impl Default for MipmapGeneratorSettings {
-    fn default() -> Self {
-        Self {
-            // Default to 8x anisotropic filtering
-            anisotropic_filtering: 8,
-            filter_type: FilterType::Triangle,
-            minimum_mip_resolution: 1,
-            compression: None,
-        }
-    }
-}
+/// Tracks the amount of bytes that have been cached since startup.
+/// Used to warn at 1GB increments to avoid continuously caching images that change every frame.
+#[derive(Resource, Default)]
+pub struct CachedDataSize(pub usize);
 
 pub struct MipmapGeneratorPlugin;
 impl Plugin for MipmapGeneratorPlugin {
     fn build(&self, app: &mut App) {
-        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
+        if let Some(image_plugin) = app
+            .init_resource::<CachedDataSize>()
+            .get_added_plugins::<ImagePlugin>()
+            .first()
+        {
             let default_sampler = image_plugin.default_sampler.clone();
             app.insert_resource(DefaultSampler(default_sampler))
                 .init_resource::<MipmapGeneratorSettings>();
@@ -86,10 +107,15 @@ impl Plugin for MipmapGeneratorPlugin {
     }
 }
 
+pub struct TaskData {
+    added_cache_size: usize,
+    image: Image,
+}
+
 #[derive(Resource, Default, Deref, DerefMut)]
 #[allow(clippy::type_complexity)]
 pub struct MipmapTasks<M: Material + GetImages>(
-    HashMap<Handle<Image>, (Task<Image>, Vec<Handle<M>>)>,
+    HashMap<Handle<Image>, (Task<TaskData>, Vec<Handle<M>>)>,
 );
 
 #[allow(clippy::too_many_arguments)]
@@ -100,6 +126,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
     no_mipmap: Query<&Handle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
     default_sampler: Res<DefaultSampler>,
+    mut cached_data_size: ResMut<CachedDataSize>,
     settings: Res<MipmapGeneratorSettings>,
     mut tasks_res: Option<ResMut<MipmapTasks<M>>>,
 ) {
@@ -143,12 +170,20 @@ pub fn generate_mipmaps<M: Material + GetImages>(
                     {
                         let mut image = image.clone();
                         let settings = settings.clone();
+                        let mut added_cache_size = 0;
                         let task = thread_pool.spawn(async move {
-                            match generate_mips_texture(&mut image, &settings.clone()) {
+                            match generate_mips_texture(
+                                &mut image,
+                                &settings.clone(),
+                                &mut added_cache_size,
+                            ) {
                                 Ok(_) => (),
                                 Err(e) => warn!("{}", e),
                             }
-                            image
+                            TaskData {
+                                added_cache_size,
+                                image,
+                            }
                         });
                         tasks.insert(image_h.clone(), (task, vec![Handle::Weak(*material_h)]));
                     }
@@ -157,11 +192,24 @@ pub fn generate_mipmaps<M: Material + GetImages>(
         }
     }
 
+    fn bytes_to_gb(bytes: usize) -> usize {
+        bytes / 1024_usize.pow(3)
+    }
+
     tasks.retain(|image_h, (task, material_handles)| {
         match future::block_on(future::poll_once(task)) {
-            Some(new_image) => {
+            Some(task_data) => {
                 if let Some(image) = images.get_mut(image_h) {
-                    *image = new_image;
+                    *image = task_data.image;
+                    let prev_cached_data_gb = bytes_to_gb(cached_data_size.0);
+                    cached_data_size.0 += task_data.added_cache_size;
+                    let current_cached_data_gb = bytes_to_gb(cached_data_size.0);
+                    if current_cached_data_gb > prev_cached_data_gb {
+                        warn!(
+                            "Generated cached texture data from just this run exceeds {}GB",
+                            current_cached_data_gb
+                        );
+                    }
                     // Touch material to trigger change detection
                     for material_h in material_handles.iter() {
                         let _ = materials.get_mut(material_h);
@@ -178,9 +226,12 @@ pub fn generate_mipmaps<M: Material + GetImages>(
     }
 }
 
+/// `added_cache_size` is for tracking the amount of data that was cached by this call.
+/// Compressed BCn data is cached on disk if cache_compressed_image_data is enabled.
 pub fn generate_mips_texture(
     image: &mut Image,
     settings: &MipmapGeneratorSettings,
+    #[allow(unused)] added_cache_size: &mut usize,
 ) -> anyhow::Result<()> {
     check_image_compatible(image)?;
     match try_into_dynamic(image.clone()) {
@@ -201,15 +252,48 @@ pub fn generate_mips_texture(
                 }
             }
 
-            let (mip_level_count, image_data) = generate_mips(
-                &mut dyn_image,
+            #[cfg(feature = "compress")]
+            let mut input_hash = u64::MAX;
+            #[allow(unused_mut)]
+            let mut loaded_from_cache = false;
+            let mut new_image_data = Vec::new();
+
+            #[cfg(feature = "compress")]
+            if compression_settings.is_some() && compressed_format.is_some() {
+                if let Some(cache_path) = &settings.compressed_image_data_cache_path {
+                    input_hash = calculate_hash(&image);
+                    if let Some(compressed_image_data) = load_from_cache(input_hash, &cache_path) {
+                        new_image_data = compressed_image_data;
+                        loaded_from_cache = true;
+                    }
+                }
+            }
+
+            let mip_count = calculate_mip_count(
+                dyn_image.width(),
+                dyn_image.height(),
                 settings.minimum_mip_resolution,
                 u32::MAX,
-                settings.filter_type,
                 compression_settings,
             );
-            image.texture_descriptor.mip_level_count = mip_level_count;
 
+            if !loaded_from_cache {
+                new_image_data = generate_mips(
+                    &mut dyn_image,
+                    mip_count,
+                    settings.filter_type,
+                    compression_settings,
+                );
+                #[cfg(feature = "compress")]
+                if let Some(cache_path) = &settings.compressed_image_data_cache_path {
+                    if compression_settings.is_some() && compressed_format.is_some() {
+                        *added_cache_size += new_image_data.len();
+                        save_to_cache(input_hash, &new_image_data, &cache_path).unwrap();
+                    }
+                }
+            }
+
+            image.texture_descriptor.mip_level_count = mip_count;
             #[cfg(feature = "compress")]
             if let Some(format) = compressed_format {
                 image.texture_descriptor.format = format;
@@ -218,24 +302,20 @@ pub fn generate_mips_texture(
                 image.texture_descriptor.view_formats = &[];
             }
 
-            image.data = image_data;
+            image.data = new_image_data;
             Ok(())
         }
         Err(e) => Err(e),
     }
 }
 
-/// Returns the number of mip levels, and a vec of bytes containing the image data.
-/// The `max_mip_count` includes the first input mip level. So setting this to 2 will
-/// result in a single additional mip level being generated, for a total of 2 levels.
+/// Returns a vec of bytes containing the image data for all generated mips.
 pub fn generate_mips(
     dyn_image: &mut DynamicImage,
-    minimum_mip_resolution: u32,
-    max_mip_count: u32,
+    mip_count: u32,
     filter_type: FilterType,
     compression: Option<CompressionSpeed>,
-) -> (u32, Vec<u8>) {
-    let mut mip_level_count = 1;
+) -> Vec<u8> {
     let mut width = dyn_image.width();
     let mut height = dyn_image.height();
 
@@ -253,16 +333,7 @@ pub fn generate_mips(
 
     let mut image_data = compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec());
 
-    #[cfg(feature = "compress")]
-    let min = 4;
-
-    #[cfg(not(feature = "compress"))]
-    let min = 1;
-
-    while width / 2 >= minimum_mip_resolution.max(min)
-        && height / 2 >= minimum_mip_resolution.max(min)
-        && mip_level_count < max_mip_count
-    {
+    for _ in 0..mip_count {
         width /= 2;
         height /= 2;
         *dyn_image = dyn_image.resize_exact(width, height, filter_type);
@@ -274,11 +345,41 @@ pub fn generate_mips(
             compressed_image_data = bcn_compress_dyn_image(compression_settings, dyn_image).ok();
         }
         image_data.append(&mut compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec()));
+    }
 
+    image_data
+}
+
+/// Returns the number of mip levels
+/// The `max_mip_count` includes the first input mip level. So setting this to 2 will
+/// result in a single additional mip level being generated, for a total of 2 levels.
+pub fn calculate_mip_count(
+    mut width: u32,
+    mut height: u32,
+    minimum_mip_resolution: u32,
+    max_mip_count: u32,
+    #[allow(unused)] compression: Option<CompressionSpeed>,
+) -> u32 {
+    let mut mip_level_count = 1;
+
+    #[cfg(feature = "compress")]
+    let min = if compression.is_some() { 4 } else { 1 };
+
+    #[cfg(not(feature = "compress"))]
+    let min = 1;
+
+    // Use log to avoid loop? Are there edge cases with rounding?
+
+    while width / 2 >= minimum_mip_resolution.max(min)
+        && height / 2 >= minimum_mip_resolution.max(min)
+        && mip_level_count < max_mip_count
+    {
+        width /= 2;
+        height /= 2;
         mip_level_count += 1;
     }
 
-    (mip_level_count, image_data)
+    mip_level_count
 }
 
 /// Extract a specific individual mip level as a new image.
@@ -489,4 +590,42 @@ pub fn bcn_equivalent_format_of_dyn_image(
             dyn_image
         )),
     }
+}
+
+/// Calculate the hash for the non-compressed non-mipmapped image.
+#[cfg(feature = "compress")]
+fn calculate_hash(image: &Image) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    image.data.hash(&mut hasher);
+    image.texture_descriptor.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Save raw image bytes to disk cache
+#[cfg(feature = "compress")]
+fn save_to_cache(hash: u64, bytes: &[u8], cache_dir: &Path) -> std::io::Result<()> {
+    if !cache_dir.exists() {
+        fs::create_dir(cache_dir)?;
+    }
+    let file_path = cache_dir.join(format!("{:x}", hash));
+    let mut file = File::create(file_path)?;
+    file.write_all(&zstd::encode_all(bytes, 0).unwrap())?;
+    Ok(())
+}
+
+/// Load from disk cache for matching input hash
+#[cfg(feature = "compress")]
+fn load_from_cache(hash: u64, cache_dir: &Path) -> Option<Vec<u8>> {
+    let file_path = cache_dir.join(format!("{:x}", hash));
+    if !file_path.exists() {
+        return None;
+    }
+    let Ok(mut file) = File::open(file_path) else {
+        return None;
+    };
+    let mut cached_bytes = Vec::new();
+    if !file.read_to_end(&mut cached_bytes).is_ok() {
+        return None;
+    };
+    zstd::decode_all(cached_bytes.as_slice()).ok()
 }

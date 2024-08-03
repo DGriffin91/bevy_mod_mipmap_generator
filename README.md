@@ -10,6 +10,8 @@ Currently supported conversions:
 - Rgba8Unorm -> Bc7RgbaUnorm
 - Rgba8UnormSrgb -> Bc7RgbaUnormSrgb
 
+Optionally set `compressed_image_data_cache_path` in `MipmapGeneratorSettings` to cache raw compressed image data on disk. Only textures that are BCn compressed will be stored.
+
 ![example_without](example_without.jpg)
 *without mipmaps*
 

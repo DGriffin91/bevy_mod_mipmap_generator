@@ -1,11 +1,14 @@
 //! Loads and renders a glTF file as a scene.
 
+use std::path::PathBuf;
+
 use bevy::prelude::*;
 use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let use_compression = args.contains(&"--compress".to_string());
+    let use_cache = args.contains(&"--cache".to_string());
 
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
@@ -14,6 +17,11 @@ fn main() {
         .insert_resource(MipmapGeneratorSettings {
             anisotropic_filtering: 16,
             compression: Option::from(use_compression.then(Default::default)),
+            compressed_image_data_cache_path: if use_cache {
+                Some(PathBuf::from("compressed_texture_cache"))
+            } else {
+                None
+            },
             ..default()
         })
         .add_systems(Startup, setup)
