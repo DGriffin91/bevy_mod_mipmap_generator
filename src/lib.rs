@@ -42,6 +42,10 @@ pub struct MipmapGeneratorSettings {
     /// If set, raw compressed image data will be cached in this directory.
     /// Images that are not BCn compressed are not cached.
     pub compressed_image_data_cache_path: Option<std::path::PathBuf>,
+    /// If low_quality is set, only 0.5 byte/px formats will be used (BC1, BC4) unless the alpha channel is in use, then BC3 will be used.
+    /// When low quality is set, compression is generally faster than CompressionSpeed::UltraFast and CompressionSpeed is ignored.
+    // TODO: low_quality normals should probably use BC5 or BC7 as they looks quite bad at BC1
+    pub low_quality: bool,
 }
 
 impl Default for MipmapGeneratorSettings {
@@ -53,11 +57,12 @@ impl Default for MipmapGeneratorSettings {
             minimum_mip_resolution: 1,
             compression: None,
             compressed_image_data_cache_path: None,
+            low_quality: false,
         }
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Hash)]
 pub enum CompressionSpeed {
     #[default]
     UltraFast,
@@ -69,14 +74,23 @@ pub enum CompressionSpeed {
 
 impl CompressionSpeed {
     #[cfg(feature = "compress")]
-    fn get_bc7_encoder(&self) -> intel_tex_2::bc7::EncodeSettings {
-        // Bevy doesn't differentiate Images with alpha vs not currently.
-        match self {
-            CompressionSpeed::UltraFast => intel_tex_2::bc7::alpha_ultra_fast_settings(),
-            CompressionSpeed::VeryFast => intel_tex_2::bc7::alpha_very_fast_settings(),
-            CompressionSpeed::Fast => intel_tex_2::bc7::alpha_fast_settings(),
-            CompressionSpeed::Medium => intel_tex_2::bc7::alpha_basic_settings(),
-            CompressionSpeed::Slow => intel_tex_2::bc7::alpha_slow_settings(),
+    fn get_bc7_encoder(&self, has_alpha: bool) -> intel_tex_2::bc7::EncodeSettings {
+        if has_alpha {
+            match self {
+                CompressionSpeed::UltraFast => intel_tex_2::bc7::alpha_ultra_fast_settings(),
+                CompressionSpeed::VeryFast => intel_tex_2::bc7::alpha_very_fast_settings(),
+                CompressionSpeed::Fast => intel_tex_2::bc7::alpha_fast_settings(),
+                CompressionSpeed::Medium => intel_tex_2::bc7::alpha_basic_settings(),
+                CompressionSpeed::Slow => intel_tex_2::bc7::alpha_slow_settings(),
+            }
+        } else {
+            match self {
+                CompressionSpeed::UltraFast => intel_tex_2::bc7::opaque_ultra_fast_settings(),
+                CompressionSpeed::VeryFast => intel_tex_2::bc7::opaque_very_fast_settings(),
+                CompressionSpeed::Fast => intel_tex_2::bc7::opaque_fast_settings(),
+                CompressionSpeed::Medium => intel_tex_2::bc7::opaque_basic_settings(),
+                CompressionSpeed::Slow => intel_tex_2::bc7::opaque_slow_settings(),
+            }
         }
     }
 }
@@ -335,19 +349,33 @@ pub fn generate_mips_texture(
     check_image_compatible(image)?;
     match try_into_dynamic(image.clone()) {
         Ok(mut dyn_image) => {
+            #[allow(unused_mut)]
+            let mut has_alpha = false;
+            #[cfg(feature = "compress")]
+            if let Some(img) = dyn_image.as_rgba8() {
+                for px in img.pixels() {
+                    if px.0[3] != 255 {
+                        has_alpha = true;
+                        break;
+                    }
+                }
+            }
+
             #[cfg(feature = "compress")]
             let mut compressed_format = None;
             #[allow(unused_mut)]
-            let mut compression_settings = settings.compression;
+            let mut compression_speed = settings.compression;
             #[cfg(feature = "compress")]
             {
                 if let Some(encoder_setting) = settings.compression {
                     compressed_format = bcn_equivalent_format_of_dyn_image(
                         &dyn_image,
                         image.texture_descriptor.format.is_srgb(),
+                        settings.low_quality,
+                        has_alpha,
                     )
                     .ok();
-                    compression_settings = compressed_format.map(|_| encoder_setting);
+                    compression_speed = compressed_format.map(|_| encoder_setting);
                 }
             }
 
@@ -358,9 +386,9 @@ pub fn generate_mips_texture(
             let mut new_image_data = Vec::new();
 
             #[cfg(feature = "compress")]
-            if compression_settings.is_some() && compressed_format.is_some() {
+            if compression_speed.is_some() && compressed_format.is_some() {
                 if let Some(cache_path) = &settings.compressed_image_data_cache_path {
-                    input_hash = calculate_hash(&image);
+                    input_hash = calculate_hash(&image, &settings);
                     if let Some(compressed_image_data) = load_from_cache(input_hash, &cache_path) {
                         new_image_data = compressed_image_data;
                         loaded_from_cache = true;
@@ -373,19 +401,14 @@ pub fn generate_mips_texture(
                 dyn_image.height(),
                 settings.minimum_mip_resolution,
                 u32::MAX,
-                compression_settings,
+                compression_speed,
             );
 
             if !loaded_from_cache {
-                new_image_data = generate_mips(
-                    &mut dyn_image,
-                    mip_count,
-                    settings.filter_type,
-                    compression_settings,
-                );
+                new_image_data = generate_mips(&mut dyn_image, has_alpha, mip_count, &settings);
                 #[cfg(feature = "compress")]
                 if let Some(cache_path) = &settings.compressed_image_data_cache_path {
-                    if compression_settings.is_some() && compressed_format.is_some() {
+                    if compression_speed.is_some() && compressed_format.is_some() {
                         *added_cache_size += new_image_data.len();
                         save_to_cache(input_hash, &new_image_data, &cache_path).unwrap();
                     }
@@ -412,9 +435,9 @@ pub fn generate_mips_texture(
 /// Use `calculate_mip_count()` to find the value for `mip_count`.
 pub fn generate_mips(
     dyn_image: &mut DynamicImage,
+    #[allow(unused_variables)] has_alpha: bool,
     mip_count: u32,
-    filter_type: FilterType,
-    compression: Option<CompressionSpeed>,
+    settings: &MipmapGeneratorSettings,
 ) -> Vec<u8> {
     let mut width = dyn_image.width();
     let mut height = dyn_image.height();
@@ -422,32 +445,44 @@ pub fn generate_mips(
     #[allow(unused_mut)]
     let mut compressed_image_data = None;
     #[cfg(feature = "compress")]
-    if let Some(compression_settings) = compression {
-        compressed_image_data = bcn_compress_dyn_image(compression_settings, dyn_image).ok();
+    if let Some(compression_settings) = settings.compression {
+        compressed_image_data = bcn_compress_dyn_image(
+            compression_settings,
+            dyn_image,
+            has_alpha,
+            settings.low_quality,
+        )
+        .ok();
     }
 
     #[cfg(not(feature = "compress"))]
-    if compression.is_some() {
+    if settings.compression.is_some() {
         warn!("Compression is Some but compress feature is disabled. Falling back to generating mips without compression.")
     }
 
     let mut image_data = compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec());
 
     #[cfg(feature = "compress")]
-    let min = if compression.is_some() { 4 } else { 1 };
+    let min = if settings.compression.is_some() { 4 } else { 1 };
     #[cfg(not(feature = "compress"))]
     let min = 1;
 
     for _ in 0..mip_count {
         width /= 2;
         height /= 2;
-        *dyn_image = dyn_image.resize_exact(width, height, filter_type);
+        *dyn_image = dyn_image.resize_exact(width, height, settings.filter_type);
 
         #[allow(unused_mut)]
         let mut compressed_image_data = None;
         #[cfg(feature = "compress")]
-        if let Some(compression_settings) = compression {
-            compressed_image_data = bcn_compress_dyn_image(compression_settings, dyn_image).ok();
+        if let Some(compression_speed) = settings.compression {
+            compressed_image_data = bcn_compress_dyn_image(
+                compression_speed,
+                dyn_image,
+                has_alpha,
+                settings.low_quality,
+            )
+            .ok();
         }
         image_data.append(&mut compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec()));
         if width <= min || height <= min {
@@ -625,85 +660,188 @@ pub fn try_into_dynamic(image: Image) -> anyhow::Result<DynamicImage> {
 #[cfg(feature = "compress")]
 fn bcn_compress_dyn_image(
     compression_speed: CompressionSpeed,
-    dyn_image: &mut DynamicImage,
+    dyn_image: &DynamicImage,
+    has_alpha: bool,
+    low_quality: bool,
 ) -> anyhow::Result<Vec<u8>> {
+    use image::Rgba;
+
     let width = dyn_image.width();
     let height = dyn_image.height();
     let mut image_data;
-    match dyn_image {
-        DynamicImage::ImageLuma8(data) => {
-            image_data = vec![0u8; intel_tex_2::bc4::calc_output_size(width, height)];
-            let surface = intel_tex_2::RSurface {
-                width,
-                height,
-                stride: width,
-                data,
-            };
-            intel_tex_2::bc4::compress_blocks_into(&surface, &mut image_data);
-        }
-        DynamicImage::ImageLumaA8(data) => {
-            image_data = vec![0u8; intel_tex_2::bc5::calc_output_size(width, height)];
-            let surface = intel_tex_2::RgSurface {
-                width,
-                height,
-                stride: width * 2,
-                data,
-            };
-            intel_tex_2::bc5::compress_blocks_into(&surface, &mut image_data);
-        }
-        DynamicImage::ImageRgba8(data) => {
-            image_data = vec![0u8; intel_tex_2::bc7::calc_output_size(width, height)];
-            let surface = intel_tex_2::RgbaSurface {
-                width,
-                height,
-                stride: width * 4,
-                data,
-            };
-            intel_tex_2::bc7::compress_blocks_into(
-                &compression_speed.get_bc7_encoder(),
-                &surface,
-                &mut image_data,
-            );
-        }
-        // Throw and error if conversion isn't supported
-        dyn_image => {
-            return Err(anyhow!(
-                "Conversion into dynamic image not supported for {:?}.",
-                dyn_image
-            ))
-        }
-    };
+    if low_quality {
+        match dyn_image {
+            DynamicImage::ImageLuma8(data) => {
+                image_data = vec![0u8; intel_tex_2::bc4::calc_output_size(width, height)];
+                let surface = intel_tex_2::RSurface {
+                    width,
+                    height,
+                    stride: width,
+                    data,
+                };
+                intel_tex_2::bc4::compress_blocks_into(&surface, &mut image_data);
+            }
+            DynamicImage::ImageLumaA8(data) => {
+                let mut rgba =
+                    ImageBuffer::<Rgba<u8>, Vec<u8>>::new(dyn_image.width(), dyn_image.height());
+                for (rgba_px, rg_px) in rgba.pixels_mut().zip(data.pixels()) {
+                    rgba_px.0[0] = rg_px.0[0];
+                    rgba_px.0[1] = rg_px.0[1];
+                }
+                image_data = vec![0u8; intel_tex_2::bc1::calc_output_size(width, height)];
+                let surface = intel_tex_2::RgbaSurface {
+                    width,
+                    height,
+                    stride: width * 4,
+                    data: rgba.as_raw(),
+                };
+                intel_tex_2::bc1::compress_blocks_into(&surface, &mut image_data);
+            }
+            DynamicImage::ImageRgba8(data) => {
+                if has_alpha {
+                    image_data = vec![0u8; intel_tex_2::bc3::calc_output_size(width, height)];
+                    let surface = intel_tex_2::RgbaSurface {
+                        width,
+                        height,
+                        stride: width * 4,
+                        data,
+                    };
+                    intel_tex_2::bc3::compress_blocks_into(&surface, &mut image_data);
+                } else {
+                    image_data = vec![0u8; intel_tex_2::bc1::calc_output_size(width, height)];
+                    let surface = intel_tex_2::RgbaSurface {
+                        width,
+                        height,
+                        stride: width * 4,
+                        data,
+                    };
+                    intel_tex_2::bc1::compress_blocks_into(&surface, &mut image_data);
+                }
+            }
+            // Throw and error if conversion isn't supported
+            dyn_image => {
+                return Err(anyhow!(
+                    "Conversion into dynamic image not supported for {:?}.",
+                    dyn_image
+                ))
+            }
+        };
+    } else {
+        match dyn_image {
+            DynamicImage::ImageLuma8(data) => {
+                image_data = vec![0u8; intel_tex_2::bc4::calc_output_size(width, height)];
+                let surface = intel_tex_2::RSurface {
+                    width,
+                    height,
+                    stride: width,
+                    data,
+                };
+                intel_tex_2::bc4::compress_blocks_into(&surface, &mut image_data);
+            }
+            DynamicImage::ImageLumaA8(data) => {
+                image_data = vec![0u8; intel_tex_2::bc5::calc_output_size(width, height)];
+                let surface = intel_tex_2::RgSurface {
+                    width,
+                    height,
+                    stride: width * 2,
+                    data,
+                };
+                intel_tex_2::bc5::compress_blocks_into(&surface, &mut image_data);
+            }
+            DynamicImage::ImageRgba8(data) => {
+                image_data = vec![0u8; intel_tex_2::bc7::calc_output_size(width, height)];
+                let surface = intel_tex_2::RgbaSurface {
+                    width,
+                    height,
+                    stride: width * 4,
+                    data,
+                };
+                intel_tex_2::bc7::compress_blocks_into(
+                    &compression_speed.get_bc7_encoder(has_alpha),
+                    &surface,
+                    &mut image_data,
+                );
+            }
+            // Throw and error if conversion isn't supported
+            dyn_image => {
+                return Err(anyhow!(
+                    "Conversion into dynamic image not supported for {:?}.",
+                    dyn_image
+                ))
+            }
+        };
+    }
+
     Ok(image_data)
 }
 
+/// If low_quality is set, only 0.5 byte/px formats will be used (BC1, BC4) unless alpha is being used (BC3)
 pub fn bcn_equivalent_format_of_dyn_image(
     dyn_image: &DynamicImage,
     is_srgb: bool,
+    low_quality: bool,
+    has_alpha: bool,
 ) -> anyhow::Result<TextureFormat> {
     if dyn_image.width() < 4 || dyn_image.height() < 4 {
         return Err(anyhow!("Image size too small for BCn compression"));
     }
-    match dyn_image {
-        DynamicImage::ImageLuma8(_) => Ok(TextureFormat::Bc4RUnorm),
-        DynamicImage::ImageLumaA8(_) => Ok(TextureFormat::Bc5RgUnorm),
-        DynamicImage::ImageRgba8(_) => Ok(if is_srgb {
-            TextureFormat::Bc7RgbaUnormSrgb
-        } else {
-            TextureFormat::Bc7RgbaUnorm
-        }),
-        // Throw and error if conversion isn't supported
-        dyn_image => Err(anyhow!(
-            "Conversion into dynamic image not supported for {:?}.",
-            dyn_image
-        )),
+    if low_quality {
+        match dyn_image {
+            DynamicImage::ImageLuma8(_) => Ok(TextureFormat::Bc4RUnorm),
+            DynamicImage::ImageLumaA8(_) => Ok(TextureFormat::Bc1RgbaUnorm),
+            DynamicImage::ImageRgba8(_) => Ok(if has_alpha {
+                if is_srgb {
+                    TextureFormat::Bc3RgbaUnormSrgb
+                } else {
+                    TextureFormat::Bc3RgbaUnorm
+                }
+            } else {
+                if is_srgb {
+                    TextureFormat::Bc1RgbaUnormSrgb
+                } else {
+                    TextureFormat::Bc1RgbaUnorm
+                }
+            }),
+            // Throw and error if conversion isn't supported
+            dyn_image => Err(anyhow!(
+                "Conversion into dynamic image not supported for {:?}.",
+                dyn_image
+            )),
+        }
+    } else {
+        match dyn_image {
+            DynamicImage::ImageLuma8(_) => Ok(TextureFormat::Bc4RUnorm),
+            DynamicImage::ImageLumaA8(_) => Ok(TextureFormat::Bc5RgUnorm),
+            DynamicImage::ImageRgba8(_) => Ok(if is_srgb {
+                TextureFormat::Bc7RgbaUnormSrgb
+            } else {
+                TextureFormat::Bc7RgbaUnorm
+            }),
+            // Throw and error if conversion isn't supported
+            dyn_image => Err(anyhow!(
+                "Conversion into dynamic image not supported for {:?}.",
+                dyn_image
+            )),
+        }
     }
 }
 
 /// Calculate the hash for the non-compressed non-mipmapped image.
 #[cfg(feature = "compress")]
-fn calculate_hash(image: &Image) -> u64 {
+fn calculate_hash(image: &Image, settings: &MipmapGeneratorSettings) -> u64 {
     let mut hasher = DefaultHasher::new();
     image.data.hash(&mut hasher);
+    if settings.low_quality {
+        (934870234u32).hash(&mut hasher);
+    }
+    settings.compression.hash(&mut hasher);
+    match settings.filter_type {
+        FilterType::Nearest => (934870234u32).hash(&mut hasher),
+        FilterType::Triangle => (46345624u32).hash(&mut hasher),
+        FilterType::CatmullRom => (54676234u32).hash(&mut hasher),
+        FilterType::Gaussian => (623455643u32).hash(&mut hasher),
+        FilterType::Lanczos3 => (675856584u32).hash(&mut hasher),
+    }
     image.texture_descriptor.hash(&mut hasher);
     hasher.finish()
 }

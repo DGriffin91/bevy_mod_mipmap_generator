@@ -14,6 +14,7 @@ use bevy_mod_mipmap_generator::{
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let use_cache = args.contains(&"--cache".to_string());
+    let low_quality = args.contains(&"--low-quality".to_string());
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
@@ -24,6 +25,7 @@ fn main() {
             } else {
                 None
             },
+            low_quality,
             ..default()
         })
         .add_systems(Startup, setup)

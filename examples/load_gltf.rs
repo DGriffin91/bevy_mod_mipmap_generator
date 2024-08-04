@@ -12,6 +12,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let use_compression = args.contains(&"--compress".to_string());
     let use_cache = args.contains(&"--cache".to_string());
+    let low_quality = args.contains(&"--low-quality".to_string());
 
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
@@ -25,6 +26,7 @@ fn main() {
             } else {
                 None
             },
+            low_quality,
             ..default()
         })
         .add_systems(Startup, setup)
