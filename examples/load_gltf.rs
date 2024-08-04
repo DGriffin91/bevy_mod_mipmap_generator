@@ -3,7 +3,10 @@
 use std::path::PathBuf;
 
 use bevy::prelude::*;
-use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
+use bevy_mod_mipmap_generator::{
+    generate_mipmaps, MipmapGeneratorDebugTextPlugin, MipmapGeneratorPlugin,
+    MipmapGeneratorSettings,
+};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -13,8 +16,8 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.1)))
         .add_plugins(DefaultPlugins)
-        // Manually setting anisotropic filtering to 16x
         .insert_resource(MipmapGeneratorSettings {
+            // Manually setting anisotropic filtering to 16x
             anisotropic_filtering: 16,
             compression: Option::from(use_compression.then(Default::default)),
             compressed_image_data_cache_path: if use_cache {
@@ -26,7 +29,7 @@ fn main() {
         })
         .add_systems(Startup, setup)
         // Add MipmapGeneratorPlugin after default plugins
-        .add_plugins(MipmapGeneratorPlugin)
+        .add_plugins((MipmapGeneratorPlugin, MipmapGeneratorDebugTextPlugin))
         // Add material types to be converted
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         //.add_system(animate_light_direction)

@@ -6,7 +6,10 @@ use bevy::{
         Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
 };
-use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
+use bevy_mod_mipmap_generator::{
+    generate_mipmaps, MipmapGeneratorDebugTextPlugin, MipmapGeneratorPlugin,
+    MipmapGeneratorSettings,
+};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -25,7 +28,7 @@ fn main() {
         })
         .add_systems(Startup, setup)
         // Add MipmapGeneratorPlugin after default plugins
-        .add_plugins(MipmapGeneratorPlugin)
+        .add_plugins((MipmapGeneratorPlugin, MipmapGeneratorDebugTextPlugin))
         // Add material types to be converted
         .add_systems(Update, generate_mipmaps::<StandardMaterial>);
 

@@ -4,14 +4,16 @@ use bevy::{
         Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     },
 };
-use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin};
+use bevy_mod_mipmap_generator::{
+    generate_mipmaps, MipmapGeneratorDebugTextPlugin, MipmapGeneratorPlugin,
+};
 
 fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_systems(Startup, setup)
         // Add MipmapGeneratorPlugin after default plugins
-        .add_plugins(MipmapGeneratorPlugin)
+        .add_plugins((MipmapGeneratorPlugin, MipmapGeneratorDebugTextPlugin))
         // Add material types to be converted
         .add_systems(Update, generate_mipmaps::<StandardMaterial>);
 

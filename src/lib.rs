@@ -85,16 +85,32 @@ impl CompressionSpeed {
 #[derive(Component)]
 pub struct NoMipmapGeneration;
 
-/// Tracks the amount of bytes that have been cached since startup.
-/// Used to warn at 1GB increments to avoid continuously caching images that change every frame.
 #[derive(Resource, Default)]
-pub struct CachedDataSize(pub usize);
+pub struct MipmapGenerationProgress {
+    pub processed: u32,
+    pub total: u32,
+    /// Tracks the amount of bytes that have been cached since startup.
+    /// Used to warn at 1GB increments to avoid continuously caching images that change every frame.
+    pub cached_data_size_bytes: usize,
+}
+
+fn format_bytes_size(size_in_bytes: usize) -> String {
+    if size_in_bytes < 1_000 {
+        format!("{}B", size_in_bytes)
+    } else if size_in_bytes < 1_000_000 {
+        format!("{:.2}KB", size_in_bytes as f64 / 1e3)
+    } else if size_in_bytes < 1_000_000_000 {
+        format!("{:.2}MB", size_in_bytes as f64 / 1e6)
+    } else {
+        format!("{:.2}GB", size_in_bytes as f64 / 1e9)
+    }
+}
 
 pub struct MipmapGeneratorPlugin;
 impl Plugin for MipmapGeneratorPlugin {
     fn build(&self, app: &mut App) {
         if let Some(image_plugin) = app
-            .init_resource::<CachedDataSize>()
+            .init_resource::<MipmapGenerationProgress>()
             .get_added_plugins::<ImagePlugin>()
             .first()
         {
@@ -104,6 +120,87 @@ impl Plugin for MipmapGeneratorPlugin {
         } else {
             warn!("No ImagePlugin found. Try adding MipmapGeneratorPlugin after DefaultPlugins");
         }
+    }
+}
+
+#[derive(Clone, Resource)]
+pub struct MipmapGeneratorDebugTextPlugin;
+impl Plugin for MipmapGeneratorDebugTextPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(self.clone())
+            .add_systems(Startup, init_loading_text)
+            .add_systems(Update, update_loading_text);
+    }
+}
+
+fn init_loading_text(mut commands: Commands) {
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                left: Val::Px(1.5),
+                top: Val::Px(1.5),
+                ..default()
+            },
+            z_index: ZIndex::Global(-1),
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections(vec![TextSection {
+                    style: TextStyle {
+                        font_size: 18.0,
+                        color: Color::BLACK,
+                        ..default()
+                    },
+                    ..default()
+                }]),
+                MipmapGeneratorDebugLoadingText,
+            ));
+        });
+    commands
+        .spawn(NodeBundle::default())
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections(vec![TextSection {
+                    style: TextStyle {
+                        font_size: 18.0,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                    ..default()
+                }]),
+                MipmapGeneratorDebugLoadingText,
+            ));
+        });
+}
+
+#[derive(Component)]
+pub struct MipmapGeneratorDebugLoadingText;
+fn update_loading_text(
+    mut texts: Query<&mut Text, With<MipmapGeneratorDebugLoadingText>>,
+    progress: Res<MipmapGenerationProgress>,
+    time: Res<Time>,
+) {
+    for mut text in &mut texts {
+        text.sections[0].value = format!(
+            "bevy_mod_mipmap_generator progress: {} / {}\n{}",
+            progress.processed,
+            progress.total,
+            if progress.cached_data_size_bytes > 0 {
+                format!(
+                    "Cached this run: {}",
+                    format_bytes_size(progress.cached_data_size_bytes)
+                )
+            } else {
+                String::new()
+            }
+        );
+        let alpha = if progress.processed == progress.total {
+            (text.sections[0].style.color.alpha() - time.delta_seconds() * 0.25).max(0.0)
+        } else {
+            1.0
+        };
+        text.sections[0].style.color.set_alpha(alpha);
     }
 }
 
@@ -126,7 +223,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
     no_mipmap: Query<&Handle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
     default_sampler: Res<DefaultSampler>,
-    mut cached_data_size: ResMut<CachedDataSize>,
+    mut progress: ResMut<MipmapGenerationProgress>,
     settings: Res<MipmapGeneratorSettings>,
     mut tasks_res: Option<ResMut<MipmapTasks<M>>>,
 ) {
@@ -186,6 +283,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
                             }
                         });
                         tasks.insert(image_h.clone(), (task, vec![Handle::Weak(*material_h)]));
+                        progress.total += 1;
                     }
                 }
             }
@@ -201,13 +299,14 @@ pub fn generate_mipmaps<M: Material + GetImages>(
             Some(task_data) => {
                 if let Some(image) = images.get_mut(image_h) {
                     *image = task_data.image;
-                    let prev_cached_data_gb = bytes_to_gb(cached_data_size.0);
-                    cached_data_size.0 += task_data.added_cache_size;
-                    let current_cached_data_gb = bytes_to_gb(cached_data_size.0);
+                    progress.processed += 1;
+                    let prev_cached_data_gb = bytes_to_gb(progress.cached_data_size_bytes);
+                    progress.cached_data_size_bytes += task_data.added_cache_size;
+                    let current_cached_data_gb = bytes_to_gb(progress.cached_data_size_bytes);
                     if current_cached_data_gb > prev_cached_data_gb {
                         warn!(
-                            "Generated cached texture data from just this run exceeds {}GB",
-                            current_cached_data_gb
+                            "Generated cached texture data from just this run is {}",
+                            format_bytes_size(progress.cached_data_size_bytes)
                         );
                     }
                     // Touch material to trigger change detection
