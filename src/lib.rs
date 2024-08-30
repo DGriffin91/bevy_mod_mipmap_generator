@@ -139,7 +139,9 @@ impl Plugin for MipmapGeneratorPlugin {
 }
 
 #[derive(Clone, Resource)]
+#[cfg(feature = "debug_text")]
 pub struct MipmapGeneratorDebugTextPlugin;
+#[cfg(feature = "debug_text")]
 impl Plugin for MipmapGeneratorDebugTextPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.clone())
@@ -148,6 +150,7 @@ impl Plugin for MipmapGeneratorDebugTextPlugin {
     }
 }
 
+#[cfg(feature = "debug_text")]
 fn init_loading_text(mut commands: Commands) {
     commands
         .spawn(NodeBundle {
@@ -189,8 +192,10 @@ fn init_loading_text(mut commands: Commands) {
         });
 }
 
+#[cfg(feature = "debug_text")]
 #[derive(Component)]
 pub struct MipmapGeneratorDebugLoadingText;
+#[cfg(feature = "debug_text")]
 fn update_loading_text(
     mut texts: Query<&mut Text, With<MipmapGeneratorDebugLoadingText>>,
     progress: Res<MipmapGenerationProgress>,
