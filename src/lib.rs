@@ -9,6 +9,7 @@ use std::{
 use anyhow::anyhow;
 
 use bevy::{
+    pbr::{ExtendedMaterial, MaterialExtension},
     prelude::*,
     render::{
         render_asset::RenderAssetUsages,
@@ -611,6 +612,22 @@ impl GetImages for StandardMaterial {
         ]
         .into_iter()
         .flatten()
+        .collect()
+    }
+}
+
+impl<T: GetImages + MaterialExtension> GetImages for ExtendedMaterial<StandardMaterial, T> {
+    fn get_images(&self) -> Vec<&Handle<Image>> {
+        vec![
+            &self.base.base_color_texture,
+            &self.base.emissive_texture,
+            &self.base.metallic_roughness_texture,
+            &self.base.normal_map_texture,
+            &self.base.occlusion_texture,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(self.extension.get_images())
         .collect()
     }
 }
