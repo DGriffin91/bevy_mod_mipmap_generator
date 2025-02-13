@@ -58,32 +58,29 @@ fn setup(
     let plane_h = meshes.add(Plane3d::default().mesh().size(20.0, 30.0));
 
     // planes
-    commands.spawn(PbrBundle {
-        mesh: plane_h.clone(),
-        material: materials.add(mat_r),
-        transform: Transform::from_xyz(-3.0, 0.0, 0.0)
+    commands.spawn((
+        Mesh3d(plane_h.clone()),
+        MeshMaterial3d(materials.add(mat_r)),
+        Transform::from_xyz(-3.0, 0.0, 0.0)
             .with_rotation(Quat::from_rotation_z(-PI * 0.5)),
-        ..default()
-    });
-    commands.spawn(PbrBundle {
-        mesh: plane_h.clone(),
-        material: materials.add(mat_rg),
-        transform: Transform::from_xyz(3.0, 0.0, 0.0)
+    ));
+    commands.spawn((
+        Mesh3d(plane_h.clone()),
+        MeshMaterial3d(materials.add(mat_rg)),
+        Transform::from_xyz(3.0, 0.0, 0.0)
             .with_rotation(Quat::from_rotation_z(PI * 0.5)),
-        ..default()
-    });
-    commands.spawn(PbrBundle {
-        mesh: plane_h.clone(),
-        material: materials.add(mat_rgba),
-        transform: Transform::from_xyz(0.0, -3.0, 0.0),
-        ..default()
-    });
+    ));
+    commands.spawn((
+        Mesh3d(plane_h.clone()),
+        MeshMaterial3d(materials.add(mat_rgba)),
+        Transform::from_xyz(0.0, -3.0, 0.0),
+    ));
 
     // camera
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 18.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 0.0, 18.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 }
 
 fn create_test_image(size: u32, cx: f32, cy: f32, channels: u32) -> Image {

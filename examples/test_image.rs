@@ -29,26 +29,24 @@ fn setup(
     let image = create_test_image(4096, -0.8, 0.156);
 
     // plane
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Plane3d::default().mesh().size(20.0, 20.0)),
-        material: materials.add(StandardMaterial::from(images.add(image))),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
+        MeshMaterial3d(materials.add(StandardMaterial::from(images.add(image)))),
+    ));
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1500.0 * 1000.0,
             shadows_enabled: false,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
     // camera
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.5, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 0.5, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
 }
 
 fn create_test_image(size: u32, cx: f32, cy: f32) -> Image {

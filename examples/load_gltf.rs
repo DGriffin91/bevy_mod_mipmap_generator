@@ -39,28 +39,25 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(1.0, 0.2, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(1.0, 0.2, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),
+    ));
 
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 2000.0 * 1000.0,
             shadows_enabled: true,
             range: 10.0,
             ..default()
         },
-        transform: Transform::from_xyz(-1.0, 2.0, -3.0),
-        ..default()
-    });
-    commands.spawn(SceneBundle {
-        scene: asset_server.load("models/FlightHelmet/FlightHelmet.gltf#Scene0"),
-        ..default()
-    });
-    commands.spawn(SceneBundle {
-        scene: asset_server.load("models/Wood/wood.gltf#Scene0"),
-        ..default()
-    });
+        Transform::from_xyz(-1.0, 2.0, -3.0),
+    ));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/FlightHelmet/FlightHelmet.gltf#Scene0")
+    ));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/Wood/wood.gltf#Scene0")
+    ));
 }
