@@ -14,8 +14,8 @@ use bevy::{
     render::{
         render_asset::RenderAssetUsages,
         render_resource::{Extent3d, TextureDimension, TextureFormat},
-        texture::{ImageSampler, ImageSamplerDescriptor},
     },
+    image::{ImageSampler, ImageSamplerDescriptor},
     tasks::{AsyncComputeTaskPool, Task},
     utils::HashMap,
 };
@@ -153,40 +153,48 @@ impl Plugin for MipmapGeneratorDebugTextPlugin {
 #[cfg(feature = "debug_text")]
 fn init_loading_text(mut commands: Commands) {
     commands
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 left: Val::Px(1.5),
                 top: Val::Px(1.5),
                 ..default()
             },
-            z_index: ZIndex::Global(-1),
-            ..default()
-        })
+            GlobalZIndex(-1),
+        ))
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_sections(vec![TextSection {
-                    style: TextStyle {
-                        font_size: 18.0,
-                        color: Color::BLACK,
-                        ..default()
-                    },
+                // TextBundle::from_sections(vec![TextSection {
+                // Text::new()
+                Text::new(""),
+                TextFont {
+                    // style: TextStyle {
+                    font_size: 18.0,
+                    // color: Color::BLACK,
                     ..default()
-                }]),
+                },
+                TextColor(Color::BLACK),
+                // ..default()
                 MipmapGeneratorDebugLoadingText,
             ));
         });
     commands
-        .spawn(NodeBundle::default())
+        .spawn(Node::default())
         .with_children(|parent| {
             parent.spawn((
-                TextBundle::from_sections(vec![TextSection {
-                    style: TextStyle {
-                        font_size: 18.0,
-                        color: Color::WHITE,
-                        ..default()
-                    },
+                Text::new(""),
+                TextFont {
+                    font_size: 18.0,
                     ..default()
-                }]),
+                },
+                TextColor(Color::WHITE),
+                // TextBundle::from_sections(vec![TextSection {
+                //     style: TextStyle {
+                //         font_size: 18.0,
+                //         color: Color::WHITE,
+                //         ..default()
+                //     },
+                //     ..default()
+                // }]),
                 MipmapGeneratorDebugLoadingText,
             ));
         });
@@ -197,12 +205,14 @@ fn init_loading_text(mut commands: Commands) {
 pub struct MipmapGeneratorDebugLoadingText;
 #[cfg(feature = "debug_text")]
 fn update_loading_text(
-    mut texts: Query<&mut Text, With<MipmapGeneratorDebugLoadingText>>,
+    mut texts: Query<(&mut Text, &mut TextColor), With<MipmapGeneratorDebugLoadingText>>,
     progress: Res<MipmapGenerationProgress>,
     time: Res<Time>,
 ) {
-    for mut text in &mut texts {
-        text.sections[0].value = format!(
+    
+
+    for (mut text, mut color) in &mut texts {
+        text.0 = format!(
             "bevy_mod_mipmap_generator progress: {} / {}\n{}",
             progress.processed,
             progress.total,
@@ -216,11 +226,11 @@ fn update_loading_text(
             }
         );
         let alpha = if progress.processed == progress.total {
-            (text.sections[0].style.color.alpha() - time.delta_seconds() * 0.25).max(0.0)
+            (color.0.alpha() - time.delta_secs() * 0.25).max(0.0)
         } else {
             1.0
         };
-        text.sections[0].style.color.set_alpha(alpha);
+        color.0.set_alpha(alpha);
     }
 }
 
@@ -235,12 +245,15 @@ pub struct MipmapTasks<M: Material + GetImages>(
     HashMap<Handle<Image>, (Task<TaskData>, Vec<Handle<M>>)>,
 );
 
+#[derive(Component, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq)]
+pub struct MaterialHandle<M: Material + GetImages>(pub Handle<M>);
+
 #[allow(clippy::too_many_arguments)]
 pub fn generate_mipmaps<M: Material + GetImages>(
     mut commands: Commands,
     mut material_events: EventReader<AssetEvent<M>>,
     mut materials: ResMut<Assets<M>>,
-    no_mipmap: Query<&Handle<M>, With<NoMipmapGeneration>>,
+    no_mipmap: Query<&MaterialHandle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
     default_sampler: Res<DefaultSampler>,
     mut progress: ResMut<MipmapGenerationProgress>,
@@ -623,17 +636,22 @@ impl GetImages for StandardMaterial {
 
 impl<T: GetImages + MaterialExtension> GetImages for ExtendedMaterial<StandardMaterial, T> {
     fn get_images(&self) -> Vec<&Handle<Image>> {
-        vec![
-            &self.base.base_color_texture,
-            &self.base.emissive_texture,
-            &self.base.metallic_roughness_texture,
-            &self.base.normal_map_texture,
-            &self.base.occlusion_texture,
-        ]
-        .into_iter()
-        .flatten()
-        .chain(self.extension.get_images())
-        .collect()
+        let mut first: Vec<&Handle<Image>> = 
+            vec![
+                &self.base.base_color_texture,
+                &self.base.emissive_texture,
+                &self.base.metallic_roughness_texture,
+                &self.base.normal_map_texture,
+                &self.base.occlusion_texture,
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let mut second = self.extension.get_images();
+
+        first.append(&mut second);
+        first
     }
 }
 
