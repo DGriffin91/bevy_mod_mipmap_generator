@@ -163,17 +163,12 @@ fn init_loading_text(mut commands: Commands) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                // TextBundle::from_sections(vec![TextSection {
-                // Text::new()
                 Text::new(""),
                 TextFont {
-                    // style: TextStyle {
                     font_size: 18.0,
-                    // color: Color::BLACK,
                     ..default()
                 },
                 TextColor(Color::BLACK),
-                // ..default()
                 MipmapGeneratorDebugLoadingText,
             ));
         });
@@ -187,14 +182,6 @@ fn init_loading_text(mut commands: Commands) {
                     ..default()
                 },
                 TextColor(Color::WHITE),
-                // TextBundle::from_sections(vec![TextSection {
-                //     style: TextStyle {
-                //         font_size: 18.0,
-                //         color: Color::WHITE,
-                //         ..default()
-                //     },
-                //     ..default()
-                // }]),
                 MipmapGeneratorDebugLoadingText,
             ));
         });
