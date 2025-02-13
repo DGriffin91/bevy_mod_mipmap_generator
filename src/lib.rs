@@ -636,7 +636,7 @@ impl GetImages for StandardMaterial {
 
 impl<T: GetImages + MaterialExtension> GetImages for ExtendedMaterial<StandardMaterial, T> {
     fn get_images(&self) -> Vec<&Handle<Image>> {
-        let mut first: Vec<&Handle<Image>> = 
+        let mut images: Vec<&Handle<Image>> = 
             vec![
                 &self.base.base_color_texture,
                 &self.base.emissive_texture,
@@ -647,11 +647,8 @@ impl<T: GetImages + MaterialExtension> GetImages for ExtendedMaterial<StandardMa
             .into_iter()
             .flatten()
             .collect();
-
-        let mut second = self.extension.get_images();
-
-        first.append(&mut second);
-        first
+        images.append(&mut self.extension.get_images());
+        images
     }
 }
 
