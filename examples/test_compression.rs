@@ -61,14 +61,12 @@ fn setup(
     commands.spawn((
         Mesh3d(plane_h.clone()),
         MeshMaterial3d(materials.add(mat_r)),
-        Transform::from_xyz(-3.0, 0.0, 0.0)
-            .with_rotation(Quat::from_rotation_z(-PI * 0.5)),
+        Transform::from_xyz(-3.0, 0.0, 0.0).with_rotation(Quat::from_rotation_z(-PI * 0.5)),
     ));
     commands.spawn((
         Mesh3d(plane_h.clone()),
         MeshMaterial3d(materials.add(mat_rg)),
-        Transform::from_xyz(3.0, 0.0, 0.0)
-            .with_rotation(Quat::from_rotation_z(PI * 0.5)),
+        Transform::from_xyz(3.0, 0.0, 0.0).with_rotation(Quat::from_rotation_z(PI * 0.5)),
     ));
     commands.spawn((
         Mesh3d(plane_h.clone()),
@@ -128,7 +126,7 @@ fn create_test_image(size: u32, cx: f32, cy: f32, channels: u32) -> Image {
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         },
-        data,
+        data: Some(data),
         ..Default::default()
     }
 }
