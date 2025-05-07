@@ -635,6 +635,25 @@ impl<T: GetImages + MaterialExtension> GetImages for ExtendedMaterial<StandardMa
             &self.base.metallic_roughness_texture,
             &self.base.normal_map_texture,
             &self.base.occlusion_texture,
+            &self.base.depth_map,
+            #[cfg(feature = "pbr_transmission_textures")]
+            &self.base.diffuse_transmission_texture,
+            #[cfg(feature = "pbr_transmission_textures")]
+            &self.base.specular_transmission_texture,
+            #[cfg(feature = "pbr_transmission_textures")]
+            &self.base.thickness_texture,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            &self.base.clearcoat_texture,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            &self.base.clearcoat_roughness_texture,
+            #[cfg(feature = "pbr_multi_layer_material_textures")]
+            &self.base.clearcoat_normal_texture,
+            #[cfg(feature = "pbr_anisotropy_texture")]
+            &self.base.anisotropy_texture,
+            #[cfg(feature = "pbr_specular_textures")]
+            &self.base.specular_texture,
+            #[cfg(feature = "pbr_specular_textures")]
+            &self.base.specular_tint_texture,
         ]
         .into_iter()
         .flatten()
