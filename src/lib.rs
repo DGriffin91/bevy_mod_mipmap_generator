@@ -9,14 +9,12 @@ use std::{
 use anyhow::anyhow;
 
 use bevy::{
+    asset::RenderAssetUsages,
     image::{ImageSampler, ImageSamplerDescriptor},
     pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
     prelude::*,
-    render::{
-        render_asset::RenderAssetUsages,
-        render_resource::{Extent3d, TextureDimension, TextureFormat},
-    },
+    render::render_resource::{Extent3d, TextureDataOrder, TextureDimension, TextureFormat},
     tasks::{AsyncComputeTaskPool, Task},
 };
 use futures_lite::future;
@@ -225,7 +223,7 @@ pub struct TaskData {
 #[derive(Resource, Default, Deref, DerefMut)]
 #[allow(clippy::type_complexity)]
 pub struct MipmapTasks<M: Material + GetImages>(
-    HashMap<Handle<Image>, (Task<TaskData>, Vec<Handle<M>>)>,
+    HashMap<Handle<Image>, (Task<TaskData>, Vec<AssetId<M>>)>,
 );
 
 #[derive(Component, Clone, Debug, Deref, DerefMut, Reflect, PartialEq, Eq)]
@@ -234,7 +232,7 @@ pub struct MaterialHandle<M: Material + GetImages>(pub Handle<M>);
 #[allow(clippy::too_many_arguments)]
 pub fn generate_mipmaps<M: Material + GetImages>(
     mut commands: Commands,
-    mut material_events: EventReader<AssetEvent<M>>,
+    mut material_events: MessageReader<AssetEvent<M>>,
     mut materials: ResMut<Assets<M>>,
     no_mipmap: Query<&MaterialHandle<M>, With<NoMipmapGeneration>>,
     mut images: ResMut<Assets<Image>>,
@@ -268,7 +266,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
         if let Some(material) = materials.get_mut(*material_h) {
             for image_h in material.get_images().into_iter() {
                 if let Some((_, material_handles)) = tasks.get_mut(image_h) {
-                    material_handles.push(Handle::Weak(*material_h));
+                    material_handles.push(*material_h);
                     continue; //There is already a task for this image
                 }
                 if let Some(image) = images.get_mut(image_h) {
@@ -298,7 +296,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
                                 image,
                             }
                         });
-                        tasks.insert(image_h.clone(), (task, vec![Handle::Weak(*material_h)]));
+                        tasks.insert(image_h.clone(), (task, vec![*material_h]));
                         progress.total += 1;
                     }
                 }
@@ -327,7 +325,7 @@ pub fn generate_mipmaps<M: Material + GetImages>(
                     }
                     // Touch material to trigger change detection
                     for material_h in material_handles.iter() {
-                        let _ = materials.get_mut(material_h);
+                        let _ = materials.get_mut(*material_h);
                     }
                 }
                 false
@@ -570,10 +568,12 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
             .data
             .as_ref()
             .map(|data| data[byte_offset..byte_offset + (width * block_size * height)].to_vec()),
+        data_order: TextureDataOrder::default(),
         texture_descriptor: new_descriptor,
         sampler: image.sampler.clone(),
         texture_view_descriptor: image.texture_view_descriptor.clone(),
         asset_usage: RenderAssetUsages::default(),
+        copy_on_resize: false,
     })
 }
 
