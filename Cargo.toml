@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18.0-rc.1", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_pbr",
@@ -25,7 +25,7 @@ intel_tex_2 = { version = "0.4.0", optional = true }
 zstd = { version = "0.13.2", optional = true }
 
 [dev-dependencies]
-bevy = { version = "0.17" }
+bevy = { version = "0.18.0-rc.1" }
 
 # Enable optimization in debug mode
 [profile.dev]
@@ -36,10 +36,12 @@ opt-level = 1
 opt-level = 3
 
 [features]
-default = ["debug_text"]
+default = ["debug_text", "bevy_zstd_rust"]
 compress = ["dep:intel_tex_2", "dep:zstd"]
 debug_text = ["bevy/bevy_ui"]
 pbr_transmission_textures = ["bevy/pbr_transmission_textures"]
 pbr_multi_layer_material_textures = ["bevy/pbr_multi_layer_material_textures"]
 pbr_anisotropy_texture = ["bevy/pbr_anisotropy_texture"]
 pbr_specular_textures = ["bevy/pbr_specular_textures"]
+bevy_zstd_rust = ["bevy/zstd_rust"]
+bevy_zstd_c = ["bevy/zstd_c"]

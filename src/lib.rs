@@ -532,7 +532,7 @@ pub fn extract_mip_level(image: &Image, mip_level: u32) -> anyhow::Result<Image>
 
     if descriptor.mip_level_count < mip_level {
         return Err(anyhow!(
-            "Mip level {mip_level} requested, but only {} are avaliable.",
+            "Mip level {mip_level} requested, but only {} are available.",
             descriptor.mip_level_count
         ));
     }
