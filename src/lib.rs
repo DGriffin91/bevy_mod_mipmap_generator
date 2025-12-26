@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use tracing::warn;
 
 use bevy::{
     asset::RenderAssetUsages,
