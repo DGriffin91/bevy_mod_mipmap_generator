@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
 use tracing::warn;
 
 use bevy::{
@@ -436,7 +437,7 @@ pub fn generate_mips_texture(
 /// Use `calculate_mip_count()` to find the value for `mip_count`.
 pub fn generate_mips(
     dyn_image: &mut DynamicImage,
-    #[allow(unused_variables)] has_alpha: bool,
+    has_alpha: bool,
     mip_count: u32,
     settings: &MipmapGeneratorSettings,
 ) -> Vec<u8> {
@@ -468,10 +469,29 @@ pub fn generate_mips(
     #[cfg(not(feature = "compress"))]
     let min = 1;
 
+    let mut resizer = Resizer::new();
+
+    let resize_alg = ResizeOptions::new()
+        .resize_alg(match settings.filter_type {
+            FilterType::Nearest => ResizeAlg::Nearest,
+            FilterType::Triangle => ResizeAlg::Convolution(fast_image_resize::FilterType::Bilinear),
+            FilterType::CatmullRom => {
+                ResizeAlg::Convolution(fast_image_resize::FilterType::CatmullRom)
+            }
+            FilterType::Gaussian => ResizeAlg::Convolution(fast_image_resize::FilterType::Gaussian),
+            FilterType::Lanczos3 => ResizeAlg::Convolution(fast_image_resize::FilterType::Lanczos3),
+        })
+        .use_alpha(has_alpha);
+
     for _ in 0..mip_count {
         width /= 2;
         height /= 2;
-        *dyn_image = dyn_image.resize_exact(width, height, settings.filter_type);
+
+        // *dyn_image = dyn_image.resize_exact(width, height, settings.filter_type); // Ex: Resizing with Image crate
+
+        let mut new = DynamicImage::new(width, height, dyn_image.color());
+        resizer.resize(dyn_image, &mut new, &resize_alg).unwrap();
+        *dyn_image = new;
 
         #[allow(unused_mut)]
         let mut compressed_image_data = None;
