@@ -497,13 +497,16 @@ pub fn generate_mips(
         let mut compressed_image_data = None;
         #[cfg(feature = "compress")]
         if let Some(compression_speed) = settings.compression {
-            compressed_image_data = bcn_compress_dyn_image(
-                compression_speed,
-                dyn_image,
-                has_alpha,
-                settings.low_quality,
-            )
-            .ok();
+            // https://github.com/bevyengine/bevy/issues/21490
+            if width >= 4 && height >= 4 {
+                compressed_image_data = bcn_compress_dyn_image(
+                    compression_speed,
+                    dyn_image,
+                    has_alpha,
+                    settings.low_quality,
+                )
+                .ok();
+            }
         }
         image_data.append(&mut compressed_image_data.unwrap_or(dyn_image.as_bytes().to_vec()));
         if width <= min || height <= min {
