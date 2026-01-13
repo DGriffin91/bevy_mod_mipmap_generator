@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-bevy = { version = "0.18.0-rc.1", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_asset",
     "bevy_scene",
     "bevy_pbr",
@@ -24,7 +24,7 @@ zstd = { version = "0.13.2", optional = true }
 
 
 [dev-dependencies]
-bevy = { version = "0.18.0-rc.1" }
+bevy = { version = "0.18" }
 
 # Enable optimization in debug mode
 [profile.dev]
