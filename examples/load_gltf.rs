@@ -48,16 +48,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         PointLight {
             intensity: 2000.0 * 1000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             range: 10.0,
             ..default()
         },
         Transform::from_xyz(-1.0, 2.0, -3.0),
     ));
-    commands.spawn(SceneRoot(
-        asset_server.load("models/FlightHelmet/FlightHelmet.gltf#Scene0")
+    commands.spawn(WorldAssetRoot(
+        asset_server.load("models/FlightHelmet/FlightHelmet.gltf#Scene0"),
     ));
-    commands.spawn(SceneRoot(
-        asset_server.load("models/Wood/wood.gltf#Scene0")
+    commands.spawn(WorldAssetRoot(
+        asset_server.load("models/Wood/wood.gltf#Scene0"),
     ));
 }
